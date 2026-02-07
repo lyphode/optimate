@@ -10,6 +10,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import Auth from "@/pages/Auth";
 import Dashboard from "@/pages/Dashboard";
 import Nesting from "@/pages/Nesting";
+import Slabs from "@/pages/Slabs";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,7 +25,6 @@ const PlaceholderPage = ({ title }: { title: string }) => (
 
 const ClientsPage = () => <PlaceholderPage title="Clients" />;
 const ProjectsPage = () => <PlaceholderPage title="Projects" />;
-const SlabsPage = () => <PlaceholderPage title="Stock Slabs" />;
 const OffcutsPage = () => <PlaceholderPage title="Off-Cuts" />;
 const ReportsPage = () => <PlaceholderPage title="Reports" />;
 const SettingsPage = () => <PlaceholderPage title="Settings" />;
@@ -77,7 +77,7 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <AppLayout>
-              <SlabsPage />
+              <Slabs />
             </AppLayout>
           </ProtectedRoute>
         }
