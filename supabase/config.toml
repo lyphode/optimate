@@ -1,1 +1,4 @@
 project_id = "iilpqftjodxxwqoqalfz"
+
+[functions.optimize-nesting]
+verify_jwt = false
