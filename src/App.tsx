@@ -9,6 +9,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
 import Auth from "@/pages/Auth";
 import Dashboard from "@/pages/Dashboard";
+import Nesting from "@/pages/Nesting";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -25,7 +26,6 @@ const ClientsPage = () => <PlaceholderPage title="Clients" />;
 const ProjectsPage = () => <PlaceholderPage title="Projects" />;
 const SlabsPage = () => <PlaceholderPage title="Stock Slabs" />;
 const OffcutsPage = () => <PlaceholderPage title="Off-Cuts" />;
-const OptimizerPage = () => <PlaceholderPage title="Nesting Optimizer" />;
 const ReportsPage = () => <PlaceholderPage title="Reports" />;
 const SettingsPage = () => <PlaceholderPage title="Settings" />;
 
@@ -97,7 +97,7 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <AppLayout>
-              <OptimizerPage />
+              <Nesting />
             </AppLayout>
           </ProtectedRoute>
         }
