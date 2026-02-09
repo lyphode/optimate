@@ -327,6 +327,7 @@ export type Database = {
           notes: string | null
           primary_color: string | null
           quantity: number
+          reserved_quantity: number
           secondary_color: string | null
           stone_name: string
           stone_type: string
@@ -345,6 +346,7 @@ export type Database = {
           notes?: string | null
           primary_color?: string | null
           quantity?: number
+          reserved_quantity?: number
           secondary_color?: string | null
           stone_name: string
           stone_type: string
@@ -363,6 +365,7 @@ export type Database = {
           notes?: string | null
           primary_color?: string | null
           quantity?: number
+          reserved_quantity?: number
           secondary_color?: string | null
           stone_name?: string
           stone_type?: string
