@@ -90,6 +90,15 @@ and reserve slabs for layouts while keeping inventory and permissions consistent
 5. LAYER RULES (ENFORCED BY TESTS)
 ----------------------------------
 
+  - Single touch point between layers (composition root):
+      Only the state layer composes and connects lower layers. UI never talks
+      to integrations or modules directly. Modules never talk to UI or state.
+      Integrations (Supabase) are only touched by state.
+      Example:
+        OK: UI -> @/hooks -> @/state -> @/integrations
+        NOT OK: UI -> @/integrations
+        NOT OK: @/modules -> @/integrations or @/state
+
   - UI (components, pages, hooks, contexts, App.tsx, main.tsx):
       May import only: @/state, @/types, @/components, @/pages, @/contexts,
       @/hooks, @/lib, React, React DOM, React Router, Radix, TanStack Query,
@@ -111,6 +120,10 @@ and reserve slabs for layouts while keeping inventory and permissions consistent
   - No circular dependencies (npm run cycle:check).
   - No singletons in barrel files (no new X() in index.ts).
   - Barrels do not instantiate classes.
+  - Enforcement:
+      These rules are mandatory. After every code change, run architecture
+      checks (e.g. npm run arch:validate and npm run cycle:check) to confirm
+      nothing is broken.
 
 
 6. DIRECTORY STRUCTURE (KEY AREAS)

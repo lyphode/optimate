@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { NestingWorkspace } from '@/components/nesting/NestingWorkspace';
 import { PartFormDialog } from '@/components/nesting/PartFormDialog';
 import { SelectSlabsDialog } from '@/components/nesting/SelectSlabsDialog';
@@ -67,8 +67,12 @@ export default function Nesting() {
   }, [projectSettings]);
 
   // Handle selected slabs from URL params and reserve them
+  const lastReservedParamRef = useRef<string | null>(null);
   useEffect(() => {
     if (slabsParam && slabs && slabs.length > 0) {
+      if (lastReservedParamRef.current === slabsParam) return;
+      lastReservedParamRef.current = slabsParam;
+
       const ids = slabsParam.split(',').filter(Boolean);
       const newIds = new Set(ids);
       setSelectedSlabIds(newIds);
@@ -88,7 +92,7 @@ export default function Nesting() {
       
       Promise.all(reservePromises).catch(console.error);
     }
-  }, [slabsParam]); // Only run when URL param changes
+  }, [slabsParam, slabs, reserveSlab]);
 
   // Transform slabs to nesting slabs, prioritizing selected ones
   const nestingSlabs: NestingSlab[] = useMemo(() => {

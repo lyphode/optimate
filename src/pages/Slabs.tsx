@@ -27,7 +27,7 @@ type StockSlab = Tables<'stock_slabs'>;
 export default function Slabs() {
   const navigate = useNavigate();
   const { user, isAdmin, isManager } = useAuth();
-  const { slabs, isLoading, error, createSlab, updateSlab, deleteSlab, reserveSlab } = useSlabs();
+  const { slabs, isLoading, error, createSlab, updateSlab, deleteSlab } = useSlabs();
   
   const [searchQuery, setSearchQuery] = useState('');
   const [stoneTypeFilter, setStoneTypeFilter] = useState<string>('all');
@@ -173,54 +173,30 @@ export default function Slabs() {
     });
   };
 
-  // Handle send to cutting
+  // Handle send to cutting (reservation happens in Nesting page)
   const handleSendToCutting = async () => {
     if (selectedSlabs.size === 0) return;
     
     const selectedSlabIds = Array.from(selectedSlabs);
-    
-    // Reserve slabs in database
-    const reservationResults: { success: boolean; slabId: string; slabName?: string }[] = [];
-    
-    for (const slabId of selectedSlabIds) {
-      const slab = slabs.find(s => s.id === slabId);
-      if (slab) {
-        try {
-          // The reserveSlab mutation will check availability with fresh data from DB
-          await reserveSlab.mutateAsync({ id: slabId, quantity: 1 });
-          reservationResults.push({ success: true, slabId, slabName: slab.stone_name });
-        } catch (error: any) {
-          console.error(`Failed to reserve slab ${slabId}:`, error);
-          const errorMessage = error?.message || 'Unknown error';
-          reservationResults.push({ success: false, slabId, slabName: slab.stone_name });
-          
-          // Show specific error for this slab
-          if (errorMessage.includes('Not enough stock') || errorMessage.includes('available')) {
-            const available = getAvailableQuantity(slab);
-            toast.warning(`Slab "${slab.stone_name}" is not available. Available: ${available}, Total: ${slab.quantity}, Reserved: ${(slab as any).reserved_quantity || 0}`);
-          } else if (errorMessage.includes('not found')) {
-            toast.error(`Slab "${slab.stone_name}" not found in database`);
-          } else {
-            toast.error(`Failed to reserve slab "${slab.stone_name}": ${errorMessage}`);
-          }
-        }
-      }
+
+    // Only send slabs that appear available (reservation happens in Nesting)
+    const availableIds = selectedSlabIds.filter(id => {
+      const slab = slabs.find(s => s.id === id);
+      return slab ? getAvailableQuantity(slab) > 0 : false;
+    });
+
+    if (availableIds.length === 0) {
+      toast.error('No available slabs selected. Please check availability and try again.');
+      return;
     }
-    
-    // Only navigate if at least one slab was successfully reserved
-    const successfulReservations = reservationResults.filter(r => r.success);
-    if (successfulReservations.length > 0) {
-      const successfulIds = successfulReservations.map(r => r.slabId);
-      navigate(`/optimizer?slabs=${successfulIds.join(',')}`);
-      setSelectedSlabs(new Set()); // Clear selection after sending
-      
-      if (successfulReservations.length < selectedSlabIds.length) {
-        toast.warning(`${successfulReservations.length} of ${selectedSlabIds.length} slab(s) sent to layout`);
-      } else {
-        toast.success(`Sent ${successfulReservations.length} slab(s) to layout`);
-      }
+
+    navigate(`/optimizer?slabs=${availableIds.join(',')}`);
+    setSelectedSlabs(new Set()); // Clear selection after sending
+
+    if (availableIds.length < selectedSlabIds.length) {
+      toast.warning(`${availableIds.length} of ${selectedSlabIds.length} slab(s) sent to layout`);
     } else {
-      toast.error('No slabs could be reserved. Please check availability and try again.');
+      toast.success(`Sent ${availableIds.length} slab(s) to layout`);
     }
   };
 
