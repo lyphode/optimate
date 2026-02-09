@@ -3,7 +3,8 @@ import { NestingPart, PlacedPart, getPartColor } from '@/lib/nesting-types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Lock, CheckCircle2, XCircle, Square, Circle, CornerUpLeft } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Lock, CheckCircle2, XCircle, Square, Circle, CornerUpLeft, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface PartsListProps {
@@ -12,6 +13,7 @@ interface PartsListProps {
   selectedPartId: string | null;
   onSelectPart: (partId: string | null) => void;
   onPartsChange: (parts: NestingPart[]) => void;
+  onAddPart?: () => void;
 }
 
 export function PartsList({
@@ -19,6 +21,7 @@ export function PartsList({
   placements,
   selectedPartId,
   onSelectPart,
+  onAddPart,
 }: PartsListProps) {
   const getShapeIcon = (shapeType: string) => {
     switch (shapeType) {
@@ -38,9 +41,22 @@ export function PartsList({
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm">Parts ({parts.length})</CardTitle>
-          <Badge variant="secondary">
-            {placements.length} placed
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary">
+              {placements.length} placed
+            </Badge>
+            {onAddPart && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onAddPart}
+                className="h-7"
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                Add
+              </Button>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="p-0">

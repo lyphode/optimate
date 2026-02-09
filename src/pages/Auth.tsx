@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/state';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,16 +16,14 @@ export default function Auth() {
   const [fullName, setFullName] = useState('');
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { signInWithPassword, signUp } = useAuth();
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const { error } = await signInWithPassword(email, password);
 
       if (error) throw error;
 
@@ -34,11 +32,11 @@ export default function Auth() {
         description: 'You have successfully signed in.',
       });
       navigate('/');
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         variant: 'destructive',
         title: 'Sign in failed',
-        description: error.message,
+        description: (error as Error).message,
       });
     } finally {
       setIsLoading(false);
@@ -50,16 +48,7 @@ export default function Auth() {
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: window.location.origin,
-          data: {
-            full_name: fullName,
-          },
-        },
-      });
+      const { error } = await signUp(email, password, { fullName });
 
       if (error) throw error;
 
@@ -67,11 +56,11 @@ export default function Auth() {
         title: 'Check your email',
         description: 'We sent you a confirmation link to verify your account.',
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         variant: 'destructive',
         title: 'Sign up failed',
-        description: error.message,
+        description: (error as Error).message,
       });
     } finally {
       setIsLoading(false);

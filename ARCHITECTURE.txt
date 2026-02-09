@@ -1,0 +1,239 @@
+================================================================================
+  SLAB OPTIMIZER PRO (STONENEST) - ARCHITECTURE, PURPOSE & GOALS
+================================================================================
+
+1. PURPOSE
+----------
+
+Slab Optimizer Pro (product name: StoneNest) is a stone fabrication management
+application for workshops and fabricators. It provides:
+
+  - Inventory control for stock slabs (stone type, dimensions, quantity, cost,
+    charge price, reserved vs available).
+  - Part entry and configuration for cutting jobs (rectangles, L-shapes,
+    circles, arcs, cutouts, edge profiles).
+  - Interactive nesting (bin-packing) optimization to arrange parts on slabs
+    and minimize waste, with support for locked parts and rotation.
+  - Role-based access: Admin, Manager, Operator (e.g. only admins/managers
+    manage slab stock; operators run nesting).
+  - Planned: client/project management, off-cuts, printable cutting layouts,
+    quotes, and reporting.
+
+The system helps users choose which slabs to use, define parts, run optimization,
+and reserve slabs for layouts while keeping inventory and permissions consistent.
+
+
+2. GOALS
+--------
+
+  - Industrial/workshop-friendly UI: dark theme, amber accents, high contrast,
+    large touch-friendly controls, clear tables and status indicators.
+  - Single-page app with protected routes and layout (sidebar, breadcrumbs).
+  - Centralized state and clear layering so UI depends only on state and types,
+    not on Supabase or modules directly.
+  - Nesting engine that supports multiple shapes, kerf width, locked positions,
+    and optional rotation; run as a Supabase Edge Function for performance.
+  - Correct reservation semantics: reserve slabs when used in a layout, release
+    when returned; block deletion of slabs that are still reserved.
+  - Clean architecture enforced by tests: no circular dependencies, pure
+    cutting-engine, dependency injection for modules, no singletons in barrels.
+  - Multi-tenant readiness via organization_id where applicable (e.g. slabs).
+
+
+3. TECHNOLOGY STACK
+-------------------
+
+  - Frontend: Vite, React 18, TypeScript, React Router v6.
+  - UI: shadcn/ui (Radix), Tailwind CSS, Lucide icons, Sonner toasts.
+  - Data: TanStack React Query for server state; Supabase JS client for
+    database and auth.
+  - Backend: Supabase (PostgreSQL, Auth, Edge Functions).
+  - Validation: Zod. Forms: React Hook Form + resolvers.
+  - State: React state + React Query; Zustand present (e.g. slab-store) for
+    optional local state.
+  - Testing: Vitest, Testing Library; architecture tests (arch:validate);
+    madge for dependency graph and cycle check.
+
+
+4. HIGH-LEVEL ARCHITECTURE
+--------------------------
+
+  [ Browser ]
+       |
+       v
+  [ React App (App.tsx) ]
+       |-- QueryClientProvider, ThemeProvider, BrowserRouter
+       |-- AuthProvider (from state layer)
+       |-- Routes: /auth, / (Dashboard), /clients, /projects, /inventory/slabs,
+       |          /inventory/offcuts, /optimizer, /reports, /settings
+       |
+       v
+  [ Pages ]  -->  [ Components ]  -->  [ UI primitives (components/ui) ]
+       |                   |
+       |                   v
+       |            [ Hooks: useSlabs, useParts, useNestingOptimization ]
+       |                   |
+       v                   v
+  [ State layer (src/state) ]
+       |  auth.tsx, nesting.ts, parts.ts, slabs.ts
+       |  Uses: React Query, Supabase client, toast
+       v
+  [ Integrations ]  -->  Supabase (client, types)
+       |
+       v
+  [ Supabase ]
+       |-- PostgreSQL (stock_slabs, parts, projects, user_roles, etc.)
+       |-- Auth (email/password, session, user)
+       |-- Edge Function: optimize-nesting (shelf-based bin packing)
+
+
+5. LAYER RULES (ENFORCED BY TESTS)
+----------------------------------
+
+  - UI (components, pages, hooks, contexts, App.tsx, main.tsx):
+      May import only: @/state, @/types, @/components, @/pages, @/contexts,
+      @/hooks, @/lib, React, React DOM, React Router, Radix, TanStack Query,
+      Lucide, form/validation libs, etc. No @/modules, no @/integrations.
+
+  - State layer:
+      Single composition root (e.g. index or composition); orchestrates via
+      interfaces. Contains auth, slabs, parts, nesting optimization (calls
+      Supabase and Edge Function).
+
+  - Modules (if present, e.g. src/modules):
+      Independent; may only depend on @/types and @/interfaces. No UI or state.
+      Cutting-engine must be pure (no async, no external deps). Cross-module
+      dependencies via dependency injection (constructor), not direct import.
+
+  - Interfaces (if present):
+      May import only @/types and @/interfaces.
+
+  - No circular dependencies (npm run cycle:check).
+  - No singletons in barrel files (no new X() in index.ts).
+  - Barrels do not instantiate classes.
+
+
+6. DIRECTORY STRUCTURE (KEY AREAS)
+----------------------------------
+
+  src/
+    main.tsx              Entry point.
+    App.tsx               Providers, router, route definitions.
+    index.css             Global styles.
+
+    pages/                Route-level pages (Dashboard, Auth, Slabs, Nesting,
+                           placeholder pages for Clients, Projects, Off-Cuts,
+                           Reports, Settings).
+
+    components/
+      layout/             AppLayout, AppSidebar (navigation, breadcrumbs).
+      inventory/          SlabCard, SlabFormDialog, DeleteSlabDialog.
+      nesting/            NestingWorkspace, PartsList, SlabsList, PartFormDialog,
+                          SelectSlabsDialog, SlabCanvas.
+      ui/                 shadcn primitives (button, dialog, form, etc.).
+      ProtectedRoute.tsx  Role-based route guard.
+      ThemeProvider.tsx   Theme (dark/light).
+
+    state/                State layer: auth, slabs, parts, nesting.
+                          Exposes: useAuth, useSlabs, useSlabsWithStock,
+                          useParts, useProjectParts, useProjectSettings,
+                          useNestingOptimization.
+
+    hooks/                Re-exports from state for UI: useSlabs, useParts,
+                          useNestingOptimization (UI imports @/hooks/*).
+
+    contexts/             AuthContext re-exports from state (AuthProvider,
+                          useAuth).
+
+    lib/
+      api/                Optional API services (slabs, optimization,
+                          navigation); used where server-side or structured
+                          API layer is needed.
+      nesting-types.ts    NestingPart, NestingSlab, PlacedPart, NestingResult,
+                          shape data, colors.
+
+    types/                Shared types: slabs, operations, projects,
+                          optimization, supabase (generated).
+
+    integrations/
+      supabase/           createClient, Database types.
+
+    store/                Optional Zustand store (e.g. slab-store).
+
+    test/
+      architecture/       architecture.test.ts, README; run arch:validate.
+
+  supabase/
+    functions/optimize-nesting/   Edge Function: shelf-based bin packing.
+    migrations/                  Schema: user_roles, profiles, clients,
+                                 projects, parts, stock_slabs, off_cuts,
+                                 reserved_quantity, RLS, etc.
+
+
+7. DATA FLOW (EXAMPLES)
+-----------------------
+
+  Slab inventory (Slabs page):
+    Slabs page --> useSlabs() (from hooks, re-exported from state/slabs.ts)
+                --> React Query + Supabase stock_slabs CRUD, reserve/release.
+    Create/update/delete/reserve/release invalidate ["stock-slabs"] and show
+    toasts.
+
+  Nesting (Optimizer page):
+    Nesting page --> useParts(projectId), useSlabs(), useProjectParts(projectId),
+                    useProjectSettings(projectId), useSlabsWithStock(),
+                    useNestingOptimization({ kerfWidth }).
+    Parts and slabs loaded from Supabase; optimization via
+    supabase.functions.invoke("optimize-nesting", { body: { parts, slabs, kerfWidth } }).
+    Edge Function returns placements and slab usage; state holds placements,
+    lock/unlock, and re-run optimization.
+
+  Auth:
+    AuthProvider (state/auth) subscribes to Supabase auth and loads user_roles.
+    ProtectedRoute checks user and optional requiredRoles (e.g. settings
+    requires admin or manager).
+
+
+8. DATABASE (SUPABASE) CONCEPTS
+-------------------------------
+
+  - app_role: admin, manager, operator.
+  - user_roles: user_id, role (per user).
+  - stock_slabs: stone_type, stone_name, dimensions (width_mm, length_mm,
+    thickness_mm), quantity, reserved_quantity, cost/charge, status, etc.
+  - parts: project_id, dimensions, shape_type, shape_data, allow_rotation,
+    assigned_slab_id, position_x/y, rotation_degrees, is_locked.
+  - projects: client linkage, status, kerf_width_mm, etc.
+  - reserved_quantity: available = quantity - reserved_quantity; used to
+    prevent over-allocation and to block deletion of reserved slabs.
+
+
+9. NESTING OPTIMIZATION
+-----------------------
+
+  - Input: parts (id, dimensions, shapeType, shapeData, allowRotation,
+    isLocked, lockedPosition), slabs (id, dimensions), kerfWidth.
+  - Edge Function: Shelf-based bin packing; respects kerf, locked parts,
+    optional rotation; returns placements (partId, slabId, x, y, rotation)
+    and slab usage (usedArea, totalArea, wastePercentage).
+  - UI: NestingWorkspace shows canvas and parts list; user can lock/unlock,
+    re-run optimization, select slabs via SelectSlabsDialog; projectId and
+    slab selection can be driven by URL params (e.g. projectId, slabs=id1,id2).
+
+
+10. VALIDATION & SCRIPTS
+------------------------
+
+  - npm run dev           Development server.
+  - npm run build         Production build.
+  - npm run test          Unit tests.
+  - npm run arch:validate Architecture tests (layer rules, no cycles, etc.).
+  - npm run dep:graph     Dependency graph (madge).
+  - npm run cycle:check   Circular dependency check (madge).
+  - npm run validate      type-check + arch:full + test.
+
+
+================================================================================
+  This document summarizes the architecture, purpose, and goals of the
+  slab-optimizer-pro (StoneNest) codebase as of the current codebase state.
+================================================================================

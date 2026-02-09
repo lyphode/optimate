@@ -14,8 +14,10 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Search, Package, Grid3X3, List, AlertTriangle } from 'lucide-react';
-import { Tables } from '@/integrations/supabase/types';
+import { Plus, Search, Package, Grid3X3, List, AlertTriangle, Scissors, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
+import type { Tables } from '@/types/supabase';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
@@ -23,26 +25,36 @@ import { cn } from '@/lib/utils';
 type StockSlab = Tables<'stock_slabs'>;
 
 export default function Slabs() {
-  const { isAdmin } = useAuth();
-  const { slabs, isLoading, error, createSlab, updateSlab, deleteSlab } = useSlabs();
+  const navigate = useNavigate();
+  const { user, isAdmin, isManager } = useAuth();
+  const { slabs, isLoading, error, createSlab, updateSlab, deleteSlab, reserveSlab } = useSlabs();
   
   const [searchQuery, setSearchQuery] = useState('');
   const [stoneTypeFilter, setStoneTypeFilter] = useState<string>('all');
   const [stockFilter, setStockFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [selectedSlabs, setSelectedSlabs] = useState<Set<string>>(new Set());
   
   const [formOpen, setFormOpen] = useState(false);
   const [editingSlab, setEditingSlab] = useState<StockSlab | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingSlab, setDeletingSlab] = useState<StockSlab | null>(null);
 
-  const canManageSlabs = isAdmin;
+  // All authenticated users can add slabs, but only admins/managers can edit/delete
+  const canAddSlabs = !!user;
+  const canManageSlabs = isAdmin || isManager;
 
   // Get unique stone types for filter
   const stoneTypes = useMemo(() => {
     const types = new Set(slabs.map(s => s.stone_type));
     return Array.from(types).sort();
   }, [slabs]);
+
+  // Calculate available quantity (total - reserved)
+  const getAvailableQuantity = (slab: StockSlab) => {
+    const reserved = (slab as any).reserved_quantity || 0;
+    return Math.max(0, slab.quantity - reserved);
+  };
 
   // Filter slabs
   const filteredSlabs = useMemo(() => {
@@ -62,10 +74,11 @@ export default function Slabs() {
         return false;
       }
 
-      // Stock filter
-      if (stockFilter === 'in-stock' && slab.quantity === 0) return false;
-      if (stockFilter === 'low-stock' && slab.quantity > 2) return false;
-      if (stockFilter === 'out-of-stock' && slab.quantity > 0) return false;
+      // Stock filter - use available quantity
+      const available = getAvailableQuantity(slab);
+      if (stockFilter === 'in-stock' && available === 0) return false;
+      if (stockFilter === 'low-stock' && available > 2) return false;
+      if (stockFilter === 'out-of-stock' && available > 0) return false;
 
       return true;
     });
@@ -73,8 +86,10 @@ export default function Slabs() {
 
   // Stats
   const totalSlabs = slabs.reduce((sum, s) => sum + s.quantity, 0);
-  const lowStockCount = slabs.filter(s => s.quantity > 0 && s.quantity <= 2).length;
-  const outOfStockCount = slabs.filter(s => s.quantity === 0).length;
+  const availableSlabs = slabs.reduce((sum, s) => sum + getAvailableQuantity(s), 0);
+  const reservedSlabs = slabs.reduce((sum, s) => sum + ((s as any).reserved_quantity || 0), 0);
+  const lowStockCount = slabs.filter(s => getAvailableQuantity(s) > 0 && getAvailableQuantity(s) <= 2).length;
+  const outOfStockCount = slabs.filter(s => getAvailableQuantity(s) === 0).length;
 
   // Handlers
   const handleAdd = () => {
@@ -87,13 +102,20 @@ export default function Slabs() {
     setFormOpen(true);
   };
 
-  const handleDuplicate = (slab: StockSlab) => {
-    setEditingSlab({
-      ...slab,
-      id: '', // Will be generated
-      stone_name: `${slab.stone_name} (Copy)`,
-    });
-    setFormOpen(true);
+  const handleDuplicate = async (slab: StockSlab) => {
+    try {
+      // Increase the original slab's quantity by 1
+      const newQuantity = slab.quantity + 1;
+      await updateSlab.mutateAsync({ 
+        id: slab.id, 
+        quantity: newQuantity 
+      });
+      
+      toast.success(`Slab "${slab.stone_name}" quantity increased to ${newQuantity}`);
+    } catch (error) {
+      console.error('Failed to update slab quantity:', error);
+      toast.error('Failed to increase slab quantity. You may not have permission to update slabs.');
+    }
   };
 
   const handleDelete = (slab: StockSlab) => {
@@ -102,13 +124,32 @@ export default function Slabs() {
   };
 
   const handleFormSubmit = async (data: any) => {
-    if (editingSlab?.id) {
-      await updateSlab.mutateAsync({ id: editingSlab.id, ...data });
-    } else {
-      await createSlab.mutateAsync(data);
+    try {
+      // Clean up the data: convert empty strings to null for optional fields
+      const cleanedData = {
+        ...data,
+        primary_color: data.primary_color || null,
+        secondary_color: data.secondary_color || null,
+        cost_per_unit: data.cost_per_unit || null,
+        charge_per_unit: data.charge_per_unit || null,
+        location: data.location || null,
+        notes: data.notes || null,
+      };
+
+      // Remove system fields before submission
+      const { id, created_at, updated_at, reserved_quantity, ...dataToSubmit } = cleanedData as any;
+      
+      if (editingSlab?.id) {
+        await updateSlab.mutateAsync({ id: editingSlab.id, ...dataToSubmit });
+      } else {
+        await createSlab.mutateAsync(dataToSubmit);
+      }
+      setFormOpen(false);
+      setEditingSlab(null);
+    } catch (error) {
+      // Error is already handled by the mutation's onError
+      console.error('Form submission error:', error);
     }
-    setFormOpen(false);
-    setEditingSlab(null);
   };
 
   const handleDeleteConfirm = async () => {
@@ -116,6 +157,70 @@ export default function Slabs() {
       await deleteSlab.mutateAsync(deletingSlab.id);
       setDeleteDialogOpen(false);
       setDeletingSlab(null);
+    }
+  };
+
+  // Handle slab selection
+  const handleSlabSelect = (slab: StockSlab) => {
+    setSelectedSlabs(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(slab.id)) {
+        newSet.delete(slab.id);
+      } else {
+        newSet.add(slab.id);
+      }
+      return newSet;
+    });
+  };
+
+  // Handle send to cutting
+  const handleSendToCutting = async () => {
+    if (selectedSlabs.size === 0) return;
+    
+    const selectedSlabIds = Array.from(selectedSlabs);
+    
+    // Reserve slabs in database
+    const reservationResults: { success: boolean; slabId: string; slabName?: string }[] = [];
+    
+    for (const slabId of selectedSlabIds) {
+      const slab = slabs.find(s => s.id === slabId);
+      if (slab) {
+        try {
+          // The reserveSlab mutation will check availability with fresh data from DB
+          await reserveSlab.mutateAsync({ id: slabId, quantity: 1 });
+          reservationResults.push({ success: true, slabId, slabName: slab.stone_name });
+        } catch (error: any) {
+          console.error(`Failed to reserve slab ${slabId}:`, error);
+          const errorMessage = error?.message || 'Unknown error';
+          reservationResults.push({ success: false, slabId, slabName: slab.stone_name });
+          
+          // Show specific error for this slab
+          if (errorMessage.includes('Not enough stock') || errorMessage.includes('available')) {
+            const available = getAvailableQuantity(slab);
+            toast.warning(`Slab "${slab.stone_name}" is not available. Available: ${available}, Total: ${slab.quantity}, Reserved: ${(slab as any).reserved_quantity || 0}`);
+          } else if (errorMessage.includes('not found')) {
+            toast.error(`Slab "${slab.stone_name}" not found in database`);
+          } else {
+            toast.error(`Failed to reserve slab "${slab.stone_name}": ${errorMessage}`);
+          }
+        }
+      }
+    }
+    
+    // Only navigate if at least one slab was successfully reserved
+    const successfulReservations = reservationResults.filter(r => r.success);
+    if (successfulReservations.length > 0) {
+      const successfulIds = successfulReservations.map(r => r.slabId);
+      navigate(`/optimizer?slabs=${successfulIds.join(',')}`);
+      setSelectedSlabs(new Set()); // Clear selection after sending
+      
+      if (successfulReservations.length < selectedSlabIds.length) {
+        toast.warning(`${successfulReservations.length} of ${selectedSlabIds.length} slab(s) sent to layout`);
+      } else {
+        toast.success(`Sent ${successfulReservations.length} slab(s) to layout`);
+      }
+    } else {
+      toast.error('No slabs could be reserved. Please check availability and try again.');
     }
   };
 
@@ -139,12 +244,20 @@ export default function Slabs() {
             Manage your slab inventory
           </p>
         </div>
-        {canManageSlabs && (
-          <Button onClick={handleAdd} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Add Slab
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {selectedSlabs.size > 0 && (
+            <Button onClick={handleSendToCutting} className="gap-2 bg-green-600 hover:bg-green-700">
+              <Scissors className="h-4 w-4" />
+              Send Ready for Cutting ({selectedSlabs.size})
+            </Button>
+          )}
+          {canAddSlabs && (
+            <Button onClick={handleAdd} className="gap-2">
+              <Plus className="h-4 w-4" />
+              Add Slab
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Stats */}
@@ -243,7 +356,7 @@ export default function Slabs() {
               <p className="text-muted-foreground mb-4">
                 Add your first slab to get started with inventory management.
               </p>
-              {canManageSlabs && (
+              {canAddSlabs && (
                 <Button onClick={handleAdd}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add First Slab
@@ -265,6 +378,8 @@ export default function Slabs() {
             <SlabCard
               key={slab.id}
               slab={slab}
+              isSelected={selectedSlabs.has(slab.id)}
+              onSelect={handleSlabSelect}
               onEdit={canManageSlabs ? handleEdit : () => {}}
               onDelete={canManageSlabs ? handleDelete : () => {}}
               onDuplicate={canManageSlabs ? handleDuplicate : () => {}}
@@ -284,6 +399,9 @@ export default function Slabs() {
                 <th className="text-left p-3 text-sm font-medium">Location</th>
                 <th className="text-left p-3 text-sm font-medium">Cost</th>
                 <th className="text-left p-3 text-sm font-medium">Charge</th>
+                {canManageSlabs && (
+                  <th className="text-left p-3 text-sm font-medium">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -314,9 +432,16 @@ export default function Slabs() {
                     {slab.width_mm} × {slab.length_mm} × {slab.thickness_mm}mm
                   </td>
                   <td className="p-3">
-                    <Badge variant={slab.quantity === 0 ? 'destructive' : slab.quantity <= 2 ? 'secondary' : 'default'}>
-                      {slab.quantity}
-                    </Badge>
+                    <div className="flex flex-col gap-1">
+                      <Badge variant={getAvailableQuantity(slab) === 0 ? 'destructive' : getAvailableQuantity(slab) <= 2 ? 'secondary' : 'default'}>
+                        {getAvailableQuantity(slab)} available
+                      </Badge>
+                      {((slab as any).reserved_quantity || 0) > 0 && (
+                        <span className="text-xs text-muted-foreground">
+                          {slab.quantity} total, {((slab as any).reserved_quantity || 0)} in layout
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="p-3 text-sm text-muted-foreground">{slab.location || '-'}</td>
                   <td className="p-3 text-sm text-muted-foreground">
@@ -325,6 +450,22 @@ export default function Slabs() {
                   <td className="p-3 text-sm text-primary font-medium">
                     {slab.charge_per_unit ? `$${slab.charge_per_unit}` : '-'}
                   </td>
+                  {canManageSlabs && (
+                    <td className="p-3">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(slab);
+                        }}
+                        title="Delete slab"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -343,7 +484,12 @@ export default function Slabs() {
 
       <DeleteSlabDialog
         open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
+        onOpenChange={(open) => {
+          setDeleteDialogOpen(open);
+          if (!open) {
+            setDeletingSlab(null);
+          }
+        }}
         slab={deletingSlab}
         onConfirm={handleDeleteConfirm}
         isDeleting={deleteSlab.isPending}

@@ -2,15 +2,17 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { NestingPart, NestingSlab, PlacedPart } from '@/lib/nesting-types';
 import { SlabCanvas } from './SlabCanvas';
 import { PartsList } from './PartsList';
+import { SlabsList } from './SlabsList';
 import { useNestingOptimization } from '@/hooks/useNestingOptimization';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Play, RotateCcw, Settings2, Layers } from 'lucide-react';
+import { Play, RotateCcw, Settings2, Layers, PackagePlus } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 
 interface NestingWorkspaceProps {
   parts: NestingPart[];
@@ -18,6 +20,8 @@ interface NestingWorkspaceProps {
   kerfWidth: number;
   onPartsChange: (parts: NestingPart[]) => void;
   onKerfWidthChange: (width: number) => void;
+  onAddPart?: () => void;
+  onAddSlabs?: () => void;
 }
 
 export function NestingWorkspace({
@@ -26,8 +30,12 @@ export function NestingWorkspace({
   kerfWidth,
   onPartsChange,
   onKerfWidthChange,
+  onAddPart,
+  onAddSlabs,
+  onSendBackToStock,
 }: NestingWorkspaceProps) {
   const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
+  const [selectedSlabId, setSelectedSlabId] = useState<string | null>(null);
   const [activeSlabIndex, setActiveSlabIndex] = useState(0);
 
   const {
@@ -101,7 +109,7 @@ export function NestingWorkspace({
   );
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
       {/* Left sidebar - Parts list */}
       <div className="lg:col-span-1">
         <PartsList
@@ -110,11 +118,12 @@ export function NestingWorkspace({
           selectedPartId={selectedPartId}
           onSelectPart={setSelectedPartId}
           onPartsChange={onPartsChange}
+          onAddPart={onAddPart}
         />
       </div>
 
       {/* Main canvas area */}
-      <div className="lg:col-span-2">
+      <div className="lg:col-span-3">
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
@@ -123,6 +132,16 @@ export function NestingWorkspace({
                 Slab Layout
               </CardTitle>
               <div className="flex items-center gap-2">
+                {onAddSlabs && (
+                  <Button
+                    variant="outline"
+                    onClick={onAddSlabs}
+                    className="gap-2"
+                  >
+                    <PackagePlus className="w-4 h-4" />
+                    Add Slabs
+                  </Button>
+                )}
                 <Button
                   onClick={handleOptimize}
                   disabled={isOptimizing || parts.length === 0 || slabs.length === 0}
@@ -148,23 +167,42 @@ export function NestingWorkspace({
                 <p>No slabs available</p>
                 <p className="text-sm">Add slabs to your inventory first</p>
               </div>
-            ) : placements.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-                <Play className="w-12 h-12 mb-2 opacity-50" />
-                <p>Click "Optimize" to place parts</p>
-                <p className="text-sm">Parts will be automatically arranged on slabs</p>
-              </div>
             ) : (
-              <Tabs value={String(activeSlabIndex)} onValueChange={(v) => setActiveSlabIndex(Number(v))}>
-                <TabsList className="mb-4">
-                  {usedSlabs.map((slab, index) => (
-                    <TabsTrigger key={slab.id} value={String(slabs.indexOf(slab))}>
-                      {slab.name || `Slab ${index + 1}`}
-                      <Badge variant="secondary" className="ml-2">
-                        {placements.filter(p => p.slabId === slab.id).length}
-                      </Badge>
-                    </TabsTrigger>
-                  ))}
+              <Tabs 
+                value={selectedSlabId ? String(slabs.findIndex(s => s.id === selectedSlabId)) : String(activeSlabIndex)} 
+                onValueChange={(v) => {
+                  const index = Number(v);
+                  setActiveSlabIndex(index);
+                  setSelectedSlabId(slabs[index]?.id || null);
+                }}
+              >
+                <TabsList className="mb-4 flex-wrap">
+                  {slabs.map((slab, index) => {
+                    const partsCount = placements.filter(p => p.slabId === slab.id).length;
+                    const hasParts = partsCount > 0;
+                    
+                    return (
+                      <TabsTrigger 
+                        key={slab.id} 
+                        value={String(index)}
+                        className={cn(
+                          hasParts && "border-green-500/50"
+                        )}
+                      >
+                        {slab.name || `Slab ${index + 1}`}
+                        {hasParts && (
+                          <Badge variant="default" className="ml-2 bg-green-500/20 text-green-600 border-green-500/50">
+                            {partsCount}
+                          </Badge>
+                        )}
+                        {!hasParts && (
+                          <Badge variant="outline" className="ml-2">
+                            0
+                          </Badge>
+                        )}
+                      </TabsTrigger>
+                    );
+                  })}
                 </TabsList>
                 {slabs.map((slab, index) => (
                   <TabsContent key={slab.id} value={String(index)}>
@@ -186,8 +224,24 @@ export function NestingWorkspace({
         </Card>
       </div>
 
-      {/* Right sidebar - Settings & Stats */}
+      {/* Right sidebar - Slabs list, Settings & Stats */}
       <div className="lg:col-span-1 space-y-4">
+        {/* Slabs in Layout */}
+        <SlabsList
+          slabs={slabs}
+          placements={placements}
+          selectedSlabId={selectedSlabId}
+          onSelectSlab={(id) => {
+            setSelectedSlabId(id);
+            if (id) {
+              const index = slabs.findIndex(s => s.id === id);
+              if (index !== -1) {
+                setActiveSlabIndex(index);
+              }
+            }
+          }}
+          onSendBackToStock={onSendBackToStock}
+        />
         {/* Settings */}
         <Card>
           <CardHeader className="pb-3">

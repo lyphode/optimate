@@ -9,7 +9,8 @@ import {
   DropdownMenuTrigger 
 } from '@/components/ui/dropdown-menu';
 import { MoreVertical, Edit, Trash2, Copy } from 'lucide-react';
-import { Tables } from '@/integrations/supabase/types';
+import type { Tables } from '@/types/supabase';
+import { cn } from '@/lib/utils';
 
 type StockSlab = Tables<'stock_slabs'>;
 
@@ -18,9 +19,11 @@ interface SlabCardProps {
   onEdit: (slab: StockSlab) => void;
   onDelete: (slab: StockSlab) => void;
   onDuplicate: (slab: StockSlab) => void;
+  isSelected?: boolean;
+  onSelect?: (slab: StockSlab) => void;
 }
 
-export function SlabCard({ slab, onEdit, onDelete, onDuplicate }: SlabCardProps) {
+export function SlabCard({ slab, onEdit, onDelete, onDuplicate, isSelected, onSelect }: SlabCardProps) {
   const getStockBadgeVariant = (qty: number) => {
     if (qty === 0) return 'destructive';
     if (qty <= 2) return 'secondary';
@@ -28,7 +31,15 @@ export function SlabCard({ slab, onEdit, onDelete, onDuplicate }: SlabCardProps)
   };
 
   return (
-    <Card className="group hover:ring-1 hover:ring-primary/50 transition-all">
+    <Card 
+      className={cn(
+        "group transition-all cursor-pointer",
+        isSelected 
+          ? "ring-2 ring-green-500 border-green-500" 
+          : "hover:ring-1 hover:ring-orange-500/50 border-orange-500/30"
+      )}
+      onClick={() => onSelect?.(slab)}
+    >
       <CardContent className="p-4">
         {/* Color swatch header */}
         <div 
@@ -42,7 +53,10 @@ export function SlabCard({ slab, onEdit, onDelete, onDuplicate }: SlabCardProps)
           }}
         >
           {/* Dropdown menu */}
-          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div 
+            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={(e) => e.stopPropagation()}
+          >
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="secondary" size="icon" className="h-7 w-7">
@@ -71,10 +85,16 @@ export function SlabCard({ slab, onEdit, onDelete, onDuplicate }: SlabCardProps)
           
           {/* Quantity badge */}
           <Badge 
-            variant={getStockBadgeVariant(slab.quantity)}
+            variant={getStockBadgeVariant((slab as any).reserved_quantity ? 
+              Math.max(0, slab.quantity - ((slab as any).reserved_quantity || 0)) : 
+              slab.quantity)}
             className="absolute bottom-2 right-2"
           >
-            {slab.quantity} in stock
+            {(() => {
+              const reserved = (slab as any).reserved_quantity || 0;
+              const available = Math.max(0, slab.quantity - reserved);
+              return reserved > 0 ? `${available}/${slab.quantity}` : slab.quantity;
+            })()} in stock
           </Badge>
         </div>
 

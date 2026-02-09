@@ -9,7 +9,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Tables } from '@/integrations/supabase/types';
+import type { Tables } from '@/types/supabase';
 import { Loader2 } from 'lucide-react';
 
 type StockSlab = Tables<'stock_slabs'>;
@@ -36,8 +36,16 @@ export function DeleteSlabDialog({
           <AlertDialogTitle>Delete Slab</AlertDialogTitle>
           <AlertDialogDescription>
             Are you sure you want to delete <strong>{slab?.stone_name}</strong>?
-            This action cannot be undone. Any off-cuts linked to this slab will
-            lose their parent reference.
+            {(() => {
+              const reserved = (slab as any)?.reserved_quantity || 0;
+              if (reserved > 0) {
+                return `\n\n⚠️ Warning: This slab has ${reserved} unit(s) currently reserved in layout. You must return them to stock before deleting.`;
+              }
+              return '';
+            })()}
+            <br /><br />
+            This action cannot be undone. The slab will be permanently removed from inventory.
+            Any off-cuts linked to this slab will lose their parent reference.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

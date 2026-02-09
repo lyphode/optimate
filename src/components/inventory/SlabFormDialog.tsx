@@ -7,6 +7,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
@@ -20,7 +21,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Tables } from '@/integrations/supabase/types';
+import type { Tables } from '@/types/supabase';
 import { Loader2 } from 'lucide-react';
 
 type StockSlab = Tables<'stock_slabs'>;
@@ -137,6 +138,9 @@ export function SlabFormDialog({
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{slab ? 'Edit Slab' : 'Add New Slab'}</DialogTitle>
+          <DialogDescription>
+            {slab ? 'Update the slab information below.' : 'Fill in the details to add a new slab to your inventory.'}
+          </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
