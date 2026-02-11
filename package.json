@@ -15,8 +15,9 @@
     "cycle:check": "madge --ts-config tsconfig.app.json --circular src",
     "arch:validate": "vitest run src/test/architecture",
     "arch:audit": "npm run arch:validate",
-    "arch:check": "tsc --noEmit --project tsconfig.arch.json",
+    "arch:check": "tsc --noEmit --project tsconfig.json",
     "arch:full": "npm run arch:check && npm run arch:audit",
+    "type-check": "tsc --noEmit",
     "validate": "npm run type-check && npm run arch:full && npm run test"
   },
   "dependencies": {

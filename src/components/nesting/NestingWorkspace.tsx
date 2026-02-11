@@ -22,6 +22,7 @@ interface NestingWorkspaceProps {
   onKerfWidthChange: (width: number) => void;
   onAddPart?: () => void;
   onAddSlabs?: () => void;
+  onSendBackToStock?: (slabId: string) => void;
 }
 
 function getPlacedDimensions(placement: PlacedPart) {
