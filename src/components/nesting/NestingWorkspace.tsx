@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { NestingPart, NestingSlab, PlacedPart } from '@/lib/nesting-types';
 import { SlabCanvas } from './SlabCanvas';
 import { PartsList } from './PartsList';
@@ -24,6 +24,64 @@ interface NestingWorkspaceProps {
   onAddSlabs?: () => void;
 }
 
+function getPlacedDimensions(placement: PlacedPart) {
+  const isRotated = placement.rotation === 90 || placement.rotation === 270;
+  return {
+    width: isRotated ? placement.height : placement.width,
+    height: isRotated ? placement.width : placement.height,
+  };
+}
+
+function checkCollision(candidate: PlacedPart, placed: PlacedPart[], kerfWidth: number) {
+  const candidateSize = getPlacedDimensions(candidate);
+
+  return placed.some((existing) => {
+    if (existing.partId === candidate.partId) return false;
+
+    const existingSize = getPlacedDimensions(existing);
+
+    const aLeft = candidate.x;
+    const aRight = candidate.x + candidateSize.width + kerfWidth;
+    const aTop = candidate.y;
+    const aBottom = candidate.y + candidateSize.height + kerfWidth;
+
+    const bLeft = existing.x;
+    const bRight = existing.x + existingSize.width + kerfWidth;
+    const bTop = existing.y;
+    const bBottom = existing.y + existingSize.height + kerfWidth;
+
+    return aLeft < bRight && aRight > bLeft && aTop < bBottom && aBottom > bTop;
+  });
+}
+
+function findBottomLeftPosition(
+  partPlacement: PlacedPart,
+  slab: NestingSlab,
+  occupied: PlacedPart[],
+  kerfWidth: number
+) {
+  const size = getPlacedDimensions(partPlacement);
+  const maxX = Math.max(0, slab.width - size.width);
+  const maxY = Math.max(0, slab.height - size.height);
+  const stepSize = 10;
+
+  for (let y = 0; y <= maxY; y += stepSize) {
+    for (let x = 0; x <= maxX; x += stepSize) {
+      const candidate: PlacedPart = {
+        ...partPlacement,
+        x,
+        y,
+      };
+
+      if (!checkCollision(candidate, occupied, kerfWidth)) {
+        return { x, y };
+      }
+    }
+  }
+
+  return null;
+}
+
 export function NestingWorkspace({
   parts,
   slabs,
@@ -43,7 +101,6 @@ export function NestingWorkspace({
     result,
     placements,
     optimize,
-    updatePlacement,
     clearPlacements,
     setPlacements,
   } = useNestingOptimization({ kerfWidth });
@@ -77,7 +134,60 @@ export function NestingWorkspace({
 
   // Handle placement update
   const handleUpdatePlacement = useCallback((partId: string, updates: Partial<PlacedPart>) => {
-    updatePlacement(partId, updates);
+    setPlacements((prevPlacements) => {
+      const targetPlacement = prevPlacements.find((p) => p.partId === partId);
+      if (!targetPlacement) return prevPlacements;
+
+      const slab = slabs.find((s) => s.id === (updates.slabId ?? targetPlacement.slabId));
+      if (!slab) {
+        return prevPlacements.map((p) => (p.partId === partId ? { ...p, ...updates } : p));
+      }
+
+      const movedPlacement: PlacedPart = { ...targetPlacement, ...updates, slabId: slab.id };
+      const isMovedPartLocked = parts.find((p) => p.id === partId)?.isLocked;
+
+      const unchanged = prevPlacements.filter(
+        (p) => p.slabId !== slab.id || p.partId === partId
+      );
+
+      const slabPlacements = prevPlacements.filter(
+        (p) => p.slabId === slab.id && p.partId !== partId
+      );
+
+      const lockedPartIds = new Set(parts.filter((p) => p.isLocked).map((p) => p.id));
+
+      const lockedPlacements = slabPlacements.filter((p) => lockedPartIds.has(p.partId));
+      const movablePlacements = slabPlacements
+        .filter((p) => !lockedPartIds.has(p.partId))
+        .sort((a, b) => b.width * b.height - a.width * a.height);
+
+      const anchoredPlacements = [{ ...movedPlacement }, ...lockedPlacements];
+
+      const rearrangedMovable = movablePlacements.map((placement) => {
+        const nextPosition = findBottomLeftPosition(
+          placement,
+          slab,
+          [...anchoredPlacements],
+          kerfWidth
+        );
+
+        if (!nextPosition) {
+          return placement;
+        }
+
+        const updatedPlacement = {
+          ...placement,
+          ...nextPosition,
+        };
+
+        anchoredPlacements.push(updatedPlacement);
+        return updatedPlacement;
+      });
+
+      const finalSlabPlacements = [{ ...movedPlacement }, ...lockedPlacements, ...rearrangedMovable];
+
+      return [...unchanged.filter((p) => p.partId !== partId), ...finalSlabPlacements];
+    });
     
     // If part is locked, also update its locked position
     const part = parts.find(p => p.id === partId);
@@ -95,7 +205,7 @@ export function NestingWorkspace({
         );
       }
     }
-  }, [updatePlacement, parts, placements, onPartsChange]);
+  }, [setPlacements, slabs, parts, kerfWidth, onPartsChange, placements]);
 
   // Calculate statistics
   const placedPartsCount = placements.length;
