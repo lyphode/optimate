@@ -153,9 +153,7 @@ export function NestingWorkspace({
         .filter((p) => !lockedPartIds.has(p.partId))
         .sort((a, b) => b.width * b.height - a.width * a.height);
 
-      const anchoredPlacements = isMovedPartLocked
-        ? [...lockedPlacements]
-        : [{ ...movedPlacement }, ...lockedPlacements];
+      const anchoredPlacements = [{ ...movedPlacement }, ...lockedPlacements];
 
       const rearrangedMovable = movablePlacements.map((placement) => {
         const nextPosition = findBottomLeftPosition(
@@ -178,9 +176,7 @@ export function NestingWorkspace({
         return updatedPlacement;
       });
 
-      const finalSlabPlacements = isMovedPartLocked
-        ? [...lockedPlacements, ...rearrangedMovable]
-        : [{ ...movedPlacement }, ...lockedPlacements, ...rearrangedMovable];
+      const finalSlabPlacements = [{ ...movedPlacement }, ...lockedPlacements, ...rearrangedMovable];
 
       return [...unchanged.filter((p) => p.partId !== partId), ...finalSlabPlacements];
     });
